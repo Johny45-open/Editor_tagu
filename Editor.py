@@ -2,6 +2,7 @@ import sys
 import os
 import pygame
 import tempfile
+import time
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
     QFileDialog, QDialog, QLineEdit, QFormLayout, QHBoxLayout
@@ -11,19 +12,28 @@ from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, APIC
 from gtts import gTTS
 
-# --- Funkce pro hlasový výstup přes gTTS s manuálním smazáním ---
+# --- Funkce pro hlasový výstup přes gTTS s bezpečným smazáním ---
 def speak_gtts(text):
     tts = gTTS(text=text, lang='cs')
     tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-    tmp_file.close()  # zavřeme hned, aby Windows dovolil zápis
+    tmp_file.close()
     tts.save(tmp_file.name)
 
     pygame.mixer.music.load(tmp_file.name)
     pygame.mixer.music.play()
+    
     while pygame.mixer.music.get_busy():
         pygame.time.Clock().tick(10)
 
-    os.remove(tmp_file.name)  # smažeme po přehrání
+    pygame.mixer.music.stop()  # uvolní přehrávač
+
+    # opakovaný pokus o smazání souboru
+    for _ in range(5):
+        try:
+            os.remove(tmp_file.name)
+            break
+        except PermissionError:
+            time.sleep(0.1)
 
 # --- Dialog pro editaci tagů + cover art ---
 class TagDialog(QDialog):
