@@ -1,6 +1,7 @@
 import sys
 import os
 import pygame
+import tempfile
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
     QFileDialog, QDialog, QLineEdit, QFormLayout, QHBoxLayout
@@ -8,6 +9,15 @@ from PyQt6.QtWidgets import (
 from mutagen.easyid3 import EasyID3
 from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, APIC
+from gtts import gTTS
+
+# --- Funkce pro hlasový výstup přes gTTS ---
+def speak_gtts(text):
+    tts = gTTS(text=text, lang='cs')
+    tmp_file = tempfile.NamedTemporaryFile(delete=True, suffix=".mp3")
+    tts.save(tmp_file.name)
+    pygame.mixer.music.load(tmp_file.name)
+    pygame.mixer.music.play()
 
 # --- Dialog pro editaci tagů + cover art ---
 class TagDialog(QDialog):
@@ -69,7 +79,7 @@ class TagDialog(QDialog):
 class EditorTagu(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Editor tagů – přehrávač + cover art")
+        self.setWindowTitle("Editor tagů – přehrávač + cover art + hlas")
         self.resize(400, 300)
 
         self.layout = QVBoxLayout()
@@ -104,6 +114,7 @@ class EditorTagu(QWidget):
             self.sound_file = file_path
             self.label_file.setText(f"Vybraný soubor: {file_path}")
             self.label_play.setText("Zvuk nebyl přehrán")
+            speak_gtts(f"Vybrán soubor {os.path.basename(file_path)}")
             # načti existující tagy
             try:
                 audio = EasyID3(self.sound_file)
@@ -122,8 +133,10 @@ class EditorTagu(QWidget):
             pygame.mixer.music.load(self.sound_file)
             pygame.mixer.music.play()
             self.label_play.setText(f"Přehrává: {os.path.basename(self.sound_file)}")
+            speak_gtts(f"Přehrává se {os.path.basename(self.sound_file)}")
         else:
             self.label_play.setText("Nejdřív vyber soubor!")
+            speak_gtts("Nejdřív vyber soubor")
 
     def edit_tag(self):
         dialog = TagDialog(self.current_tags)
@@ -152,8 +165,10 @@ class EditorTagu(QWidget):
                     audio_id3.save()
 
                 self.label_play.setText(f"Tagy a cover uloženy: {self.current_tags.get('title','')}")
+                speak_gtts(f"Tagy uloženy: {self.current_tags.get('title','')}")
             except Exception as e:
                 self.label_play.setText(f"Chyba při ukládání tagů: {e}")
+                speak_gtts("Chyba při ukládání tagů")
 
 
 if __name__ == "__main__":
