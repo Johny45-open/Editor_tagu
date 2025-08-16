@@ -5,6 +5,8 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
     QFileDialog, QDialog, QLineEdit, QHBoxLayout
 )
+from mutagen.easyid3 import EasyID3
+from mutagen.mp3 import MP3
 
 class TagDialog(QDialog):
     def __init__(self, current_tag=""):
@@ -40,7 +42,7 @@ class TagDialog(QDialog):
 class EditorTagu(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Editor tagů – s přehrávačem a dialogem")
+        self.setWindowTitle("Editor tagů – přehrávač + uložení tagu")
         self.resize(400, 250)
 
         self.layout = QVBoxLayout()
@@ -51,7 +53,7 @@ class EditorTagu(QWidget):
         self.label_file = QLabel("Žádný soubor vybrán")
         self.layout.addWidget(self.label_file)
 
-        self.load_btn = QPushButton("Vybrat zvukový soubor")
+        self.load_btn = QPushButton("Vybrat MP3 soubor")
         self.load_btn.clicked.connect(self.load_file)
         self.layout.addWidget(self.load_btn)
 
@@ -62,7 +64,6 @@ class EditorTagu(QWidget):
         self.play_btn.clicked.connect(self.play_sound)
         self.layout.addWidget(self.play_btn)
 
-        # tlačítko pro otevření dialogu tagu
         self.edit_tag_btn = QPushButton("Editovat tag")
         self.edit_tag_btn.clicked.connect(self.edit_tag)
         self.layout.addWidget(self.edit_tag_btn)
@@ -71,11 +72,17 @@ class EditorTagu(QWidget):
         self.current_tag = ""
 
     def load_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Vyber zvukový soubor", "", "Zvukové soubory (*.wav *.mp3)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "Vyber MP3 soubor", "", "MP3 soubory (*.mp3)")
         if file_path:
             self.sound_file = file_path
             self.label_file.setText(f"Vybraný soubor: {file_path}")
             self.label_play.setText("Zvuk nebyl přehrán")
+            # Načti existující tag, pokud existuje
+            try:
+                audio = EasyID3(self.sound_file)
+                self.current_tag = audio.get("title", [""])[0]
+            except:
+                self.current_tag = ""
 
     def play_sound(self):
         if self.sound_file:
@@ -90,6 +97,15 @@ class EditorTagu(QWidget):
         if dialog.exec():  # OK stisknuto
             self.current_tag = dialog.get_tag()
             self.label_play.setText(f"Aktuální tag: {self.current_tag}")
+            # uložit tag do MP3
+            try:
+                audio = MP3(self.sound_file, ID3=EasyID3)
+                audio["title"] = self.current_tag
+                audio.save()
+                self.label_play.setText(f"Tag uložen: {self.current_tag}")
+            except Exception as e:
+                self.label_play.setText(f"Chyba při ukládání tagu: {e}")
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
