@@ -11,13 +11,16 @@ from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, APIC
 from gtts import gTTS
 
-# --- Funkce pro hlasový výstup přes gTTS ---
+# --- Funkce pro hlasový výstup přes gTTS s automatickým smazáním ---
 def speak_gtts(text):
     tts = gTTS(text=text, lang='cs')
-    tmp_file = tempfile.NamedTemporaryFile(delete=True, suffix=".mp3")
-    tts.save(tmp_file.name)
-    pygame.mixer.music.load(tmp_file.name)
-    pygame.mixer.music.play()
+    with tempfile.NamedTemporaryFile(delete=True, suffix=".mp3") as tmp_file:
+        tts.save(tmp_file.name)
+        pygame.mixer.music.load(tmp_file.name)
+        pygame.mixer.music.play()
+        # čekáme, až se přehrání dokončí
+        while pygame.mixer.music.get_busy():
+            pygame.time.Clock().tick(10)
 
 # --- Dialog pro editaci tagů + cover art ---
 class TagDialog(QDialog):
