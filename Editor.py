@@ -7,12 +7,14 @@ from PyQt6.QtWidgets import (
 )
 from mutagen.easyid3 import EasyID3
 from mutagen.mp3 import MP3
+from mutagen.id3 import ID3, APIC
 
+# --- Dialog pro editaci tagů + cover art ---
 class TagDialog(QDialog):
     def __init__(self, tags=None):
         super().__init__()
         self.setWindowTitle("Editace tagů")
-        self.resize(350, 180)
+        self.resize(350, 220)
 
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
@@ -20,7 +22,6 @@ class TagDialog(QDialog):
         form_layout = QFormLayout()
         self.layout.addLayout(form_layout)
 
-        # pole pro různé tagy
         self.title_edit = QLineEdit(tags.get("title", ""))
         form_layout.addRow("Název:", self.title_edit)
 
@@ -33,6 +34,12 @@ class TagDialog(QDialog):
         self.comment_edit = QLineEdit(tags.get("comment", ""))
         form_layout.addRow("Komentář:", self.comment_edit)
 
+        # tlačítko pro vybrání obrázku
+        self.cover_file = None
+        self.cover_btn = QPushButton("Vybrat obrázek (cover art)")
+        self.cover_btn.clicked.connect(self.select_cover)
+        self.layout.addWidget(self.cover_btn)
+
         # tlačítka OK a Zrušit
         btn_layout = QHBoxLayout()
         self.ok_btn = QPushButton("OK")
@@ -42,22 +49,27 @@ class TagDialog(QDialog):
         self.cancel_btn = QPushButton("Zrušit")
         self.cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(self.cancel_btn)
-
         self.layout.addLayout(btn_layout)
+
+    def select_cover(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Vyber obrázek", "", "Obrázky (*.jpg *.jpeg *.png)")
+        if file_path:
+            self.cover_file = file_path
 
     def get_tags(self):
         return {
             "title": self.title_edit.text(),
             "artist": self.artist_edit.text(),
             "album": self.album_edit.text(),
-            "comment": self.comment_edit.text()
+            "comment": self.comment_edit.text(),
+            "cover": self.cover_file
         }
 
-
+# --- Hlavní okno editoru ---
 class EditorTagu(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Editor tagů – přehrávač + víc tagů")
+        self.setWindowTitle("Editor tagů – přehrávač + cover art")
         self.resize(400, 300)
 
         self.layout = QVBoxLayout()
@@ -79,7 +91,7 @@ class EditorTagu(QWidget):
         self.play_btn.clicked.connect(self.play_sound)
         self.layout.addWidget(self.play_btn)
 
-        self.edit_tag_btn = QPushButton("Editovat tagy")
+        self.edit_tag_btn = QPushButton("Editovat tagy a cover")
         self.edit_tag_btn.clicked.connect(self.edit_tag)
         self.layout.addWidget(self.edit_tag_btn)
 
@@ -99,10 +111,11 @@ class EditorTagu(QWidget):
                     "title": audio.get("title", [""])[0],
                     "artist": audio.get("artist", [""])[0],
                     "album": audio.get("album", [""])[0],
-                    "comment": audio.get("comment", [""])[0]
+                    "comment": audio.get("comment", [""])[0],
+                    "cover": None
                 }
             except:
-                self.current_tags = {"title": "", "artist": "", "album": "", "comment": ""}
+                self.current_tags = {"title": "", "artist": "", "album": "", "comment": "", "cover": None}
 
     def play_sound(self):
         if self.sound_file:
@@ -116,13 +129,29 @@ class EditorTagu(QWidget):
         dialog = TagDialog(self.current_tags)
         if dialog.exec():
             self.current_tags = dialog.get_tags()
-            # uložit tagy do MP3
             try:
+                # uložit základní tagy
                 audio = MP3(self.sound_file, ID3=EasyID3)
                 for key, value in self.current_tags.items():
-                    audio[key] = value
+                    if key != "cover":
+                        audio[key] = value
                 audio.save()
-                self.label_play.setText(f"Tagy uloženy: {self.current_tags.get('title','')}")
+
+                # uložit cover art, pokud byl vybrán
+                if self.current_tags.get("cover"):
+                    audio_id3 = ID3(self.sound_file)
+                    with open(self.current_tags["cover"], "rb") as img:
+                        mime_type = "image/jpeg" if self.current_tags["cover"].lower().endswith((".jpg", ".jpeg")) else "image/png"
+                        audio_id3["APIC"] = APIC(
+                            encoding=3,
+                            mime=mime_type,
+                            type=3,
+                            desc="Cover",
+                            data=img.read()
+                        )
+                    audio_id3.save()
+
+                self.label_play.setText(f"Tagy a cover uloženy: {self.current_tags.get('title','')}")
             except Exception as e:
                 self.label_play.setText(f"Chyba při ukládání tagů: {e}")
 
