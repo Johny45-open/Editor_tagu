@@ -18,7 +18,6 @@ def speak_gtts(text):
         tts.save(tmp_file.name)
         pygame.mixer.music.load(tmp_file.name)
         pygame.mixer.music.play()
-        # čekáme, až se přehrání dokončí
         while pygame.mixer.music.get_busy():
             pygame.time.Clock().tick(10)
 
@@ -47,13 +46,11 @@ class TagDialog(QDialog):
         self.comment_edit = QLineEdit(tags.get("comment", ""))
         form_layout.addRow("Komentář:", self.comment_edit)
 
-        # tlačítko pro vybrání obrázku
         self.cover_file = None
         self.cover_btn = QPushButton("Vybrat obrázek (cover art)")
         self.cover_btn.clicked.connect(self.select_cover)
         self.layout.addWidget(self.cover_btn)
 
-        # tlačítka OK a Zrušit
         btn_layout = QHBoxLayout()
         self.ok_btn = QPushButton("OK")
         self.ok_btn.clicked.connect(self.accept)
@@ -117,7 +114,6 @@ class EditorTagu(QWidget):
             self.sound_file = file_path
             self.label_file.setText(f"Vybraný soubor: {file_path}")
             self.label_play.setText("Zvuk nebyl přehrán")
-            speak_gtts(f"Vybrán soubor {os.path.basename(file_path)}")
             # načti existující tagy
             try:
                 audio = EasyID3(self.sound_file)
@@ -130,6 +126,16 @@ class EditorTagu(QWidget):
                 }
             except:
                 self.current_tags = {"title": "", "artist": "", "album": "", "comment": "", "cover": None}
+
+            # hlasový výstup všech tagů
+            tag_text = (
+                f"Vybrán soubor {os.path.basename(file_path)}. "
+                f"Název: {self.current_tags['title'] or 'nenastaveno'}. "
+                f"Autor: {self.current_tags['artist'] or 'nenastaveno'}. "
+                f"Album: {self.current_tags['album'] or 'nenastaveno'}. "
+                f"Komentář: {self.current_tags['comment'] or 'nenastaveno'}."
+            )
+            speak_gtts(tag_text)
 
     def play_sound(self):
         if self.sound_file:
