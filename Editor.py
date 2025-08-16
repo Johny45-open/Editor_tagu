@@ -3,27 +3,37 @@ import os
 import pygame
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
-    QFileDialog, QDialog, QLineEdit, QHBoxLayout
+    QFileDialog, QDialog, QLineEdit, QFormLayout, QHBoxLayout
 )
 from mutagen.easyid3 import EasyID3
 from mutagen.mp3 import MP3
 
 class TagDialog(QDialog):
-    def __init__(self, current_tag=""):
+    def __init__(self, tags=None):
         super().__init__()
-        self.setWindowTitle("Editace tagu")
-        self.resize(300, 120)
+        self.setWindowTitle("Editace tagů")
+        self.resize(350, 180)
 
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
 
-        self.label = QLabel("Zadej nový tag:")
-        self.layout.addWidget(self.label)
+        form_layout = QFormLayout()
+        self.layout.addLayout(form_layout)
 
-        self.tag_edit = QLineEdit()
-        self.tag_edit.setText(current_tag)
-        self.layout.addWidget(self.tag_edit)
+        # pole pro různé tagy
+        self.title_edit = QLineEdit(tags.get("title", ""))
+        form_layout.addRow("Název:", self.title_edit)
 
+        self.artist_edit = QLineEdit(tags.get("artist", ""))
+        form_layout.addRow("Autor:", self.artist_edit)
+
+        self.album_edit = QLineEdit(tags.get("album", ""))
+        form_layout.addRow("Album:", self.album_edit)
+
+        self.comment_edit = QLineEdit(tags.get("comment", ""))
+        form_layout.addRow("Komentář:", self.comment_edit)
+
+        # tlačítka OK a Zrušit
         btn_layout = QHBoxLayout()
         self.ok_btn = QPushButton("OK")
         self.ok_btn.clicked.connect(self.accept)
@@ -35,15 +45,20 @@ class TagDialog(QDialog):
 
         self.layout.addLayout(btn_layout)
 
-    def get_tag(self):
-        return self.tag_edit.text()
+    def get_tags(self):
+        return {
+            "title": self.title_edit.text(),
+            "artist": self.artist_edit.text(),
+            "album": self.album_edit.text(),
+            "comment": self.comment_edit.text()
+        }
 
 
 class EditorTagu(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Editor tagů – přehrávač + uložení tagu")
-        self.resize(400, 250)
+        self.setWindowTitle("Editor tagů – přehrávač + víc tagů")
+        self.resize(400, 300)
 
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
@@ -64,12 +79,12 @@ class EditorTagu(QWidget):
         self.play_btn.clicked.connect(self.play_sound)
         self.layout.addWidget(self.play_btn)
 
-        self.edit_tag_btn = QPushButton("Editovat tag")
+        self.edit_tag_btn = QPushButton("Editovat tagy")
         self.edit_tag_btn.clicked.connect(self.edit_tag)
         self.layout.addWidget(self.edit_tag_btn)
 
         self.sound_file = ""
-        self.current_tag = ""
+        self.current_tags = {}
 
     def load_file(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Vyber MP3 soubor", "", "MP3 soubory (*.mp3)")
@@ -77,12 +92,17 @@ class EditorTagu(QWidget):
             self.sound_file = file_path
             self.label_file.setText(f"Vybraný soubor: {file_path}")
             self.label_play.setText("Zvuk nebyl přehrán")
-            # Načti existující tag, pokud existuje
+            # načti existující tagy
             try:
                 audio = EasyID3(self.sound_file)
-                self.current_tag = audio.get("title", [""])[0]
+                self.current_tags = {
+                    "title": audio.get("title", [""])[0],
+                    "artist": audio.get("artist", [""])[0],
+                    "album": audio.get("album", [""])[0],
+                    "comment": audio.get("comment", [""])[0]
+                }
             except:
-                self.current_tag = ""
+                self.current_tags = {"title": "", "artist": "", "album": "", "comment": ""}
 
     def play_sound(self):
         if self.sound_file:
@@ -93,18 +113,18 @@ class EditorTagu(QWidget):
             self.label_play.setText("Nejdřív vyber soubor!")
 
     def edit_tag(self):
-        dialog = TagDialog(self.current_tag)
-        if dialog.exec():  # OK stisknuto
-            self.current_tag = dialog.get_tag()
-            self.label_play.setText(f"Aktuální tag: {self.current_tag}")
-            # uložit tag do MP3
+        dialog = TagDialog(self.current_tags)
+        if dialog.exec():
+            self.current_tags = dialog.get_tags()
+            # uložit tagy do MP3
             try:
                 audio = MP3(self.sound_file, ID3=EasyID3)
-                audio["title"] = self.current_tag
+                for key, value in self.current_tags.items():
+                    audio[key] = value
                 audio.save()
-                self.label_play.setText(f"Tag uložen: {self.current_tag}")
+                self.label_play.setText(f"Tagy uloženy: {self.current_tags.get('title','')}")
             except Exception as e:
-                self.label_play.setText(f"Chyba při ukládání tagu: {e}")
+                self.label_play.setText(f"Chyba při ukládání tagů: {e}")
 
 
 if __name__ == "__main__":
