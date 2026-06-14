@@ -1,58 +1,21 @@
-import sys, os, tempfile, time
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QPushButton, QListWidget,
-    QFileDialog, QLabel, QDialog, QFormLayout, QLineEdit, QMessageBox
+    QWidget, QVBoxLayout, QPushButton, QListWidget,
+    QFileDialog, QLabel, QDialog, QFormLayout, QLineEdit, QMessageBox, QDialogButtonBox
 )
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import QDialogButtonBox
-import pygame
-from gtts import gTTS
-from mutagen.easyid3 import EasyID3
-from mutagen.mp3 import MP3
-from mutagen.id3 import ID3, APIC
+import os
+import tag_manager
 
-
-# inicializace pygame
-pygame.mixer.init()
-
-# funkce na mluvení přes gTTS
-def speak_gtts(text):
-    tts = gTTS(text=text, lang="cs")
-    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-    tmp_file.close()
-    tts.save(tmp_file.name)
-
-    # přehrajeme hlas
-    pygame.mixer.music.load(tmp_file.name)
-    pygame.mixer.music.play()
-
-    while pygame.mixer.music.get_busy():
-        pygame.time.Clock().tick(10)
-
-    pygame.mixer.music.stop()
-
-    # smažeme dočasný soubor
-    for _ in range(5):
-        try:
-            os.remove(tmp_file.name)
-            break
-        except PermissionError:
-            time.sleep(0.1)
-
-
-# dialog pro úpravu tagů
 class TagEditorDialog(QDialog):
-    def __init__(self, file_path):
+    def __init__(self, file_path, audio_manager):
         super().__init__()
+        self.audio_manager = audio_manager
         self.setWindowTitle("Upravit tagy")
         self.file_path = file_path
 
         layout = QFormLayout(self)
 
-        try:
-            audio = EasyID3(file_path)
-        except Exception:
-            audio = {}
+        audio = tag_manager.get_tags(file_path)
 
         self.title_edit = QLineEdit(audio.get("title", [""])[0] if "title" in audio else "")
         self.artist_edit = QLineEdit(audio.get("artist", [""])[0] if "artist" in audio else "")
@@ -83,28 +46,14 @@ class TagEditorDialog(QDialog):
             self.cover_label.setPixmap(pixmap)
 
     def save_tags(self):
-        try:
-            audio = EasyID3(self.file_path)
-        except Exception:
-            audio = MP3(self.file_path, ID3=ID3)
-            audio.add_tags()
-
-        audio["title"] = self.title_edit.text()
-        audio["artist"] = self.artist_edit.text()
-        audio.save()
-
-        if self.cover_path:
-            audio = MP3(self.file_path, ID3=ID3)
-            with open(self.cover_path, "rb") as img:
-                audio.tags.add(APIC(mime="image/jpeg", type=3, desc=u"Cover", data=img.read()))
-            audio.save()
-
+        tag_manager.save_tags(self.file_path, self.title_edit.text(), self.artist_edit.text(), self.cover_path)
         self.accept()
 
 
 class EditorTagu(QWidget):
-    def __init__(self):
+    def __init__(self, audio_manager):
         super().__init__()
+        self.audio_manager = audio_manager
         self.setWindowTitle("Editor tagů – playlist + hlas + tagy")
         self.resize(600, 450)
         self.layout = QVBoxLayout()
@@ -142,31 +91,20 @@ class EditorTagu(QWidget):
         if selected >= 0:
             file_to_play = self.sound_files[selected]
 
-            # nejdřív hlas
-            speak_gtts(f"Přehrává se {os.path.basename(file_to_play)}")
-
-            # pak hudba
-            pygame.mixer.music.load(file_to_play)
-            pygame.mixer.music.play()
+            self.audio_manager.speak(f"Přehrává se {os.path.basename(file_to_play)}")
+            self.audio_manager.play(file_to_play)
 
             self.label_status.setText(f"Přehrává: {os.path.basename(file_to_play)}")
         else:
             self.label_status.setText("Nejdřív vyber soubor!")
-            speak_gtts("Nejdřív vyber soubor")
+            self.audio_manager.speak("Nejdřív vyber soubor")
 
     def edit_tags(self):
         selected = self.playlist.currentRow()
         if selected >= 0:
             file_to_edit = self.sound_files[selected]
-            dialog = TagEditorDialog(file_to_edit)
+            dialog = TagEditorDialog(file_to_edit, self.audio_manager)
             if dialog.exec():
-                speak_gtts("Tagy byly uloženy")
+                self.audio_manager.speak("Tagy byly uloženy")
         else:
             QMessageBox.warning(self, "Chyba", "Nejdřív vyber soubor!")
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = EditorTagu()
-    window.show()
-    sys.exit(app.exec())
